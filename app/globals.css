@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --font-sans:
+    "Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-serif:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans), sans-serif;
+  background-image:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, rgba(15, 61, 62, 0.03) 25%, transparent 25%),
+    linear-gradient(225deg, rgba(15, 61, 62, 0.03) 25%, transparent 25%);
+  background-size: auto, 26px 26px, 26px 26px;
+  background-position: 0 0, 0 0, 13px 13px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-serif), serif;
+}
