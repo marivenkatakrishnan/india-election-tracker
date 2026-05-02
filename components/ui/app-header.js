@@ -24,6 +24,9 @@ export function AppHeader() {
               Election Tracker
             </p>
             <p className="font-serif text-lg text-slate-900">Live India pulse</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">
+              Built by Marivenkatakrishnan
+            </p>
           </div>
         </Link>
 

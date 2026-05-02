@@ -1,4 +1,5 @@
 import { ElectionDashboard } from "@/components/dashboard/election-dashboard";
+import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { RegionTabs } from "@/components/ui/region-tabs";
 import { getElectionResults } from "@/lib/elections";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -16,6 +17,7 @@ export default async function DashboardPage({ searchParams }) {
 
   return (
     <div className="space-y-8">
+      <AutoRefresh intervalMs={60000} />
       <section className="rounded-[2.5rem] border border-black/10 bg-white p-8 shadow-[0_22px_70px_rgba(15,61,62,0.12)]">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

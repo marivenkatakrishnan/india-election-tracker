@@ -1,4 +1,5 @@
 import { NewsHub } from "@/components/news/news-hub";
+import { AutoRefresh } from "@/components/ui/auto-refresh";
 import { getRegionConfig, resolveRegionId } from "@/lib/regions";
 import { getNewsSnapshot } from "@/lib/news-snapshot";
 
@@ -13,11 +14,14 @@ export default async function NewsPage({ searchParams }) {
   const news = await getNewsSnapshot(regionId, { fresh: true });
 
   return (
-    <NewsHub
-      region={region}
-      articles={news.articles}
-      articleError={news.articleError}
-      sources={news.sources}
-    />
+    <>
+      <AutoRefresh intervalMs={60000} />
+      <NewsHub
+        region={region}
+        articles={news.articles}
+        articleError={news.articleError}
+        sources={news.sources}
+      />
+    </>
   );
 }
