@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { AppHeader } from "@/components/ui/app-header";
 
 export const metadata = {
@@ -15,6 +16,7 @@ export default function RootLayout({ children }) {
           <AppHeader />
           <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">{children}</main>
         </div>
+        <Analytics />
       </body>
     </html>
   );
