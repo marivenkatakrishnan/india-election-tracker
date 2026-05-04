@@ -150,6 +150,8 @@ export function ElectionDashboard({ summary, rows, error }) {
 
   const parties = ["all", ...new Set(rows.map((row) => row.party))].sort();
   const states = ["all", ...new Set(rows.map((row) => row.state))].sort();
+  const availableStates = states.filter((state) => state !== "all");
+  const hasSingleState = availableStates.length === 1;
   const searchTerm = deferredSearch.trim().toLowerCase();
 
   const filteredRows = rows.filter((row) => {
@@ -266,17 +268,23 @@ export function ElectionDashboard({ summary, rows, error }) {
 
             <label className="space-y-2">
               <span className="text-sm font-semibold text-slate-700">State</span>
-              <select
-                value={stateFilter}
-                onChange={(event) => setStateFilter(event.target.value)}
-                className="w-full rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm outline-none transition focus:border-[#0f3d3e]"
-              >
-                {states.map((state) => (
-                  <option key={state} value={state}>
-                    {state === "all" ? "All states" : state}
-                  </option>
-                ))}
-              </select>
+              {hasSingleState ? (
+                <div className="flex h-[50px] items-center rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm font-medium text-slate-700">
+                  {availableStates[0]}
+                </div>
+              ) : (
+                <select
+                  value={stateFilter}
+                  onChange={(event) => setStateFilter(event.target.value)}
+                  className="w-full rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm outline-none transition focus:border-[#0f3d3e]"
+                >
+                  {states.map((state) => (
+                    <option key={state} value={state}>
+                      {state === "all" ? "All states" : state}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
 
             <label className="space-y-2">
