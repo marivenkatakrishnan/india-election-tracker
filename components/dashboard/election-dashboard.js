@@ -5,6 +5,24 @@ import { ElectionChart } from "@/components/dashboard/election-chart";
 import { ErrorState } from "@/components/ui/error-state";
 import { formatCompactNumber, formatNumber, formatPercent } from "@/lib/format";
 
+function Badge({ children, tone = "default" }) {
+  const toneClasses = {
+    default: "border-black/10 bg-white text-slate-600",
+    accent: "border-[#0f3d3e]/15 bg-[#0f3d3e]/5 text-[#0f3d3e]",
+    warm: "border-amber-200 bg-amber-50 text-amber-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] ${
+        toneClasses[tone] || toneClasses.default
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
 function MetricCard({ label, value, hint }) {
   return (
     <div className="rounded-[1.75rem] border border-black/10 bg-white p-5 shadow-[0_18px_50px_rgba(15,61,62,0.08)]">
@@ -29,13 +47,57 @@ function getConstituencyDetailUrl(rows = []) {
   return rows.find((row) => row.detailUrl)?.detailUrl || "";
 }
 
+function getMarginInsight(margin) {
+  if (!Number.isFinite(margin) || margin <= 0) {
+    return { label: "Margin pending", tone: "default" };
+  }
+
+  if (margin <= 1000) {
+    return { label: "Close fight", tone: "warm" };
+  }
+
+  if (margin <= 5000) {
+    return { label: "Competitive", tone: "accent" };
+  }
+
+  return { label: "Comfortable", tone: "default" };
+}
+
+function formatRoundStatus(value) {
+  if (!value) {
+    return "Round pending";
+  }
+
+  if (/^\d+\/\d+$/.test(value)) {
+    return `Round ${value}`;
+  }
+
+  return value;
+}
+
+function getCloseContests(rows, limit = 5) {
+  return rows
+    .filter((row) => row.rank === 1 && Number.isFinite(row.margin) && row.margin > 0)
+    .sort((left, right) => {
+      if (left.margin !== right.margin) {
+        return left.margin - right.margin;
+      }
+
+      return right.votes - left.votes;
+    })
+    .slice(0, limit);
+}
+
 function exportRowsToCsv(rows) {
   const headers = [
     "Constituency",
     "State",
     "Candidate",
     "Party",
+    "Alliance",
     "Votes",
+    "Margin",
+    "Round Status",
     "EVM Votes",
     "Postal Votes",
     "Vote Share",
@@ -52,7 +114,10 @@ function exportRowsToCsv(rows) {
         row.state,
         row.candidate,
         row.party,
+        row.alliance,
         row.votes,
+        row.margin ?? "",
+        row.roundStatus,
         row.evmVotes,
         row.postalVotes,
         formatPercent(row.share),
@@ -150,6 +215,7 @@ function DetailDrawer({ constituency, onClose }) {
   const thirdPlace = resolvedRows.find((row) => row.rank === 3);
   const margin = winner && runnerUp ? winner.votes - runnerUp.votes : winner?.votes || 0;
   const pendingDetailText = detailError || "Detailed constituency ranking has not been published yet.";
+  const winnerMarginInsight = getMarginInsight(winner?.margin);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-sm">
@@ -160,6 +226,11 @@ function DetailDrawer({ constituency, onClose }) {
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#0f3d3e]">Area detail</p>
             <h3 className="mt-3 font-serif text-4xl text-slate-900">{constituency.name}</h3>
             <p className="mt-2 text-sm uppercase tracking-[0.2em] text-slate-500">{constituency.state}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Badge tone="accent">{winner?.alliance || "Alliance pending"}</Badge>
+              <Badge>{formatRoundStatus(winner?.roundStatus)}</Badge>
+              <Badge tone={winnerMarginInsight.tone}>{winnerMarginInsight.label}</Badge>
+            </div>
           </div>
           <button
             type="button"
@@ -231,6 +302,7 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
   const [search, setSearch] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("closest-margin");
   const [selectedConstituency, setSelectedConstituency] = useState(null);
   const deferredSearch = useDeferredValue(search);
 
@@ -323,6 +395,27 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
       ? constituencyMap.get(selectedConstituency)
       : null;
   const hasActiveFilters = Boolean(search) || partyFilter !== "all" || stateFilter !== "all";
+  const sortedRows = [...filteredRows].sort((left, right) => {
+    if (sortBy === "closest-margin") {
+      const leftMargin = Number.isFinite(left.margin) ? left.margin : Number.MAX_SAFE_INTEGER;
+      const rightMargin = Number.isFinite(right.margin) ? right.margin : Number.MAX_SAFE_INTEGER;
+
+      if (leftMargin !== rightMargin) {
+        return leftMargin - rightMargin;
+      }
+    }
+
+    if (sortBy === "votes-desc") {
+      return right.votes - left.votes;
+    }
+
+    if (sortBy === "party") {
+      return left.party.localeCompare(right.party) || left.constituency.localeCompare(right.constituency);
+    }
+
+    return left.constituency.localeCompare(right.constituency);
+  });
+  const closeContests = getCloseContests(filteredRows);
 
   return (
     <div className="space-y-8">
@@ -338,11 +431,11 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
           hint="Combined votes in the filtered view."
         />
         <MetricCard
-          label="Currently ahead"
+          label="Currently winning"
           value={leadingParty?.party || summary.leadingParty}
           hint={buildPartyStandingHint(
             leadingParty,
-            `${summary.leadingSeats} seats currently shown as ahead in the full view.`,
+            `${summary.leadingSeats} seats currently shown as winning in the full view.`,
           )}
         />
         <MetricCard
@@ -356,6 +449,49 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
           hint={buildPartyStandingHint(thirdParty, "Third-place party will appear as more live results come in.")}
         />
       </section>
+
+      {closeContests.length ? (
+        <section className="rounded-[2rem] border border-black/10 bg-white p-6 shadow-[0_18px_60px_rgba(15,61,62,0.08)]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#0f3d3e]">Quick scan</p>
+              <h2 className="mt-2 font-serif text-3xl text-slate-900">Closest contests right now</h2>
+            </div>
+            <p className="max-w-xl text-sm text-slate-600">
+              These constituencies have the smallest visible winning margins in the current dashboard view.
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-5">
+            {closeContests.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => setSelectedConstituency(row.constituency)}
+                className="rounded-[1.5rem] border border-black/10 bg-[#f8f5ee] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#0f3d3e] hover:bg-white"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{row.state}</p>
+                    <h3 className="mt-2 font-semibold text-slate-900">{row.constituency}</h3>
+                  </div>
+                  <Badge tone="warm">Close fight</Badge>
+                </div>
+                <p className="mt-4 text-sm font-semibold text-slate-900">{row.candidate}</p>
+                <p className="mt-1 text-sm text-slate-600">{row.party}</p>
+                <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+                  <span>Margin</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(row.margin)}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-sm text-slate-600">
+                  <span>Count</span>
+                  <span>{formatRoundStatus(row.roundStatus)}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="min-w-0 rounded-[2rem] border border-black/10 bg-white p-6 shadow-[0_18px_60px_rgba(15,61,62,0.08)]">
@@ -371,7 +507,7 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
             </p>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
             <label className="flex flex-col gap-2">
               <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">
                 Constituency or candidate
@@ -419,6 +555,20 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
                 ))}
               </select>
             </label>
+
+            <label className="flex flex-col gap-2">
+              <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="w-full rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm outline-none transition focus:border-[#0f3d3e]"
+              >
+                <option value="closest-margin">Closest margins</option>
+                <option value="votes-desc">Highest votes</option>
+                <option value="constituency">Constituency</option>
+                <option value="party">Party</option>
+              </select>
+            </label>
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
@@ -453,7 +603,7 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
 
             <button
               type="button"
-              onClick={() => exportRowsToCsv(filteredRows)}
+              onClick={() => exportRowsToCsv(sortedRows)}
               disabled={!filteredRows.length}
               className="rounded-full border border-black/10 bg-[#0f3d3e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#124f50] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#0f3d3e]"
             >
@@ -499,12 +649,17 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
                 <th className="px-6 py-4 font-semibold">Candidate</th>
                 <th className="px-6 py-4 font-semibold">Party</th>
                 <th className="px-6 py-4 font-semibold">Votes</th>
+                <th className="px-6 py-4 font-semibold">Margin</th>
+                <th className="px-6 py-4 font-semibold">Count</th>
                 <th className="px-6 py-4 font-semibold">Vote %</th>
                 <th className="px-6 py-4 font-semibold">Result</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
-              {filteredRows.map((row) => (
+              {sortedRows.map((row) => {
+                const marginInsight = getMarginInsight(row.margin);
+
+                return (
                 <tr
                   key={row.id}
                   className={`align-top transition hover:bg-slate-50 ${
@@ -519,13 +674,27 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
                     <p className="font-semibold text-slate-900">{row.candidate}</p>
                     <p className="mt-1 text-xs text-slate-500">Rank #{row.rank}</p>
                   </td>
-                  <td className="px-6 py-4 text-slate-700">{row.party}</td>
+                  <td className="px-6 py-4 text-slate-700">
+                    <p>{row.party}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.15em] text-slate-500">
+                      {row.alliance || "Other"}
+                    </p>
+                  </td>
                   <td className="px-6 py-4">
                     <p className="font-semibold text-slate-900">{formatNumber(row.votes)}</p>
                     <p className="mt-1 text-xs text-slate-500">
                       EVM {formatCompactNumber(row.evmVotes)} • Postal {formatCompactNumber(row.postalVotes)}
                     </p>
                   </td>
+                  <td className="px-6 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {Number.isFinite(row.margin) ? formatNumber(row.margin) : "Pending"}
+                    </p>
+                    <div className="mt-2">
+                      <Badge tone={marginInsight.tone}>{marginInsight.label}</Badge>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-700">{formatRoundStatus(row.roundStatus)}</td>
                   <td className="px-6 py-4 text-slate-700">{formatPercent(row.share)}</td>
                   <td className="px-6 py-4">
                     <span className="inline-flex rounded-full border border-black/10 bg-[#f8f5ee] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#0f3d3e]">
@@ -540,7 +709,7 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -557,9 +726,9 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
 
       <section className="grid gap-4 md:grid-cols-3">
         <MetricCard
-          label="Winners shown"
+          label="Winning areas"
           value={filteredWinners.length}
-          hint="One winner is shown per area based on the highest vote total."
+          hint="One winning candidate is shown per constituency based on the highest vote total."
         />
         <MetricCard
           label="Parties shown"

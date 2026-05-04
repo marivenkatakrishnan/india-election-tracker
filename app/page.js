@@ -32,7 +32,7 @@ export default async function HomePage({ searchParams }) {
             {region.label} election headlines and constituency results in one dashboard.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-200">
-            Follow the latest {region.label.toLowerCase()} election headlines, see who is leading, and explore
+            Follow the latest {region.label.toLowerCase()} election headlines, see who is winning, and explore
             constituency-wise results in one simple place that refreshes regularly.
           </p>
 
@@ -89,9 +89,9 @@ export default async function HomePage({ searchParams }) {
           hint="Latest election stories collected from supported news sources."
         />
         <StatCard
-          label="Currently ahead"
+          label="Currently winning"
           value={elections.summary.leadingParty}
-          hint={`${elections.summary.leadingSeats} seats currently shown as leading in this tracker.`}
+          hint={`${elections.summary.leadingSeats} seats currently shown as winning in this tracker.`}
         />
         <StatCard
           label="Last updated"
