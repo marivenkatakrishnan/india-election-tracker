@@ -298,7 +298,7 @@ function DetailDrawer({ constituency, onClose }) {
   );
 }
 
-export function ElectionDashboard({ regionId, summary, rows, error }) {
+export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows, error }) {
   const [search, setSearch] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
@@ -337,7 +337,6 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
   const visibleConstituencies = new Set(filteredRows.map((row) => row.constituency)).size;
   const totalVisibleVotes = filteredRows.reduce((sum, row) => sum + row.votes, 0);
   const constituencyMap = new Map();
-  const chartMap = new Map();
 
   filteredRows.forEach((row) => {
     const existing = constituencyMap.get(row.constituency) || {
@@ -352,44 +351,40 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
     existing.rows.sort((left, right) => left.rank - right.rank);
     constituencyMap.set(row.constituency, existing);
   });
+  const consolidatedParties = partyBreakdown.length
+    ? partyBreakdown
+    : Array.from(
+        filteredRows.reduce((map, row) => {
+          const current = map.get(row.party) || {
+            party: row.party,
+            votes: 0,
+            seatsWon: 0,
+            candidateCount: 0,
+          };
 
-  filteredRows.forEach((row) => {
-    const current = chartMap.get(row.party) || {
-      party: row.party,
-      votes: 0,
-      seatsWon: 0,
-    };
+          current.votes += row.votes;
+          current.candidateCount += 1;
 
-    current.votes += row.votes;
+          if (row.rank === 1) {
+            current.seatsWon += 1;
+          }
 
-    if (row.rank === 1) {
-      current.seatsWon += 1;
-    }
+          map.set(row.party, current);
 
-    chartMap.set(row.party, current);
-  });
+          return map;
+        }, new Map()).values(),
+      ).sort((left, right) => {
+        if (right.seatsWon !== left.seatsWon) {
+          return right.seatsWon - left.seatsWon;
+        }
 
-  const chartData = Array.from(chartMap.values())
-    .sort((left, right) => {
-      if (right.seatsWon !== left.seatsWon) {
-        return right.seatsWon - left.seatsWon;
-      }
-
-      return right.votes - left.votes;
-    });
-  const topParties = chartData.slice(0, 3);
+        return right.votes - left.votes;
+      });
+  const topParties = consolidatedParties.slice(0, 3);
   const leadingParty = topParties[0] || null;
   const secondParty = topParties[1] || null;
   const thirdParty = topParties[2] || null;
-  const chartPreview = chartData
-    .sort((left, right) => {
-      if (right.seatsWon !== left.seatsWon) {
-        return right.seatsWon - left.seatsWon;
-      }
-
-      return right.votes - left.votes;
-    })
-    .slice(0, 8);
+  const chartPreview = consolidatedParties.slice(0, 8);
   const activeConstituency =
     selectedConstituency && constituencyMap.has(selectedConstituency)
       ? constituencyMap.get(selectedConstituency)
@@ -435,7 +430,7 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
           value={leadingParty?.party || summary.leadingParty}
           hint={buildPartyStandingHint(
             leadingParty,
-            `${summary.leadingSeats} seats currently shown as winning in the full view.`,
+            `${summary.leadingSeats} seats currently shown as winning in the consolidated tally.`,
           )}
         />
         <MetricCard
@@ -449,6 +444,43 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
           hint={buildPartyStandingHint(thirdParty, "Third-place party will appear as more live results come in.")}
         />
       </section>
+
+      {partyBreakdown.length ? (
+        <section className="rounded-[2rem] border border-black/10 bg-white p-6 shadow-[0_18px_60px_rgba(15,61,62,0.08)]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#0f3d3e]">Party tally</p>
+              <h2 className="mt-2 font-serif text-3xl text-slate-900">Consolidated seats won</h2>
+            </div>
+            <p className="max-w-xl text-sm text-slate-600">
+              Quick party-wise seat totals from the current live results in this region.
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {partyBreakdown.slice(0, 8).map((entry) => (
+              <div
+                key={entry.party}
+                className="rounded-[1.5rem] border border-black/10 bg-[#f8f5ee] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">{entry.party}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.15em] text-slate-500">
+                      {entry.candidateCount} candidates listed
+                    </p>
+                  </div>
+                  <Badge tone="accent">{entry.seatsWon} seats</Badge>
+                </div>
+                <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+                  <span>Votes shown</span>
+                  <span className="font-semibold text-slate-900">{formatCompactNumber(entry.votes)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {closeContests.length ? (
         <section className="rounded-[2rem] border border-black/10 bg-white p-6 shadow-[0_18px_60px_rgba(15,61,62,0.08)]">
@@ -618,9 +650,9 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#0f3d3e]">
                 Party overview
               </p>
-              <h2 className="mt-2 font-serif text-3xl text-slate-900">Seats and votes</h2>
+              <h2 className="mt-2 font-serif text-3xl text-slate-900">Seats won by party</h2>
             </div>
-            <p className="text-sm text-slate-600">Top eight parties in the filtered results.</p>
+            <p className="text-sm text-slate-600">Top eight parties in the consolidated regional tally.</p>
           </div>
           <div className="mt-6">
             <ElectionChart data={chartPreview} />
@@ -682,9 +714,11 @@ export function ElectionDashboard({ regionId, summary, rows, error }) {
                   </td>
                   <td className="px-6 py-4">
                     <p className="font-semibold text-slate-900">{formatNumber(row.votes)}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      EVM {formatCompactNumber(row.evmVotes)} • Postal {formatCompactNumber(row.postalVotes)}
-                    </p>
+                    {row.postalVotes > 0 ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        EVM {formatCompactNumber(row.evmVotes)} • Postal {formatCompactNumber(row.postalVotes)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-6 py-4">
                     <p className="font-semibold text-slate-900">

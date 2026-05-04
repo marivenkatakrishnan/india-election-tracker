@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatCompactNumber } from "@/lib/format";
+import { formatCompactNumber, formatNumber } from "@/lib/format";
 
 export function ElectionChart({ data }) {
   const containerRef = useRef(null);
@@ -68,7 +68,7 @@ export function ElectionChart({ data }) {
             tickLine={false}
             axisLine={false}
             fontSize={12}
-            tickFormatter={(value) => formatCompactNumber(value)}
+            tickFormatter={(value) => formatNumber(value)}
           />
           <Tooltip
             cursor={{ fill: "rgba(15,61,62,0.08)" }}
@@ -89,13 +89,13 @@ export function ElectionChart({ data }) {
                   className="bg-white p-4 text-sm text-slate-700"
                 >
                   <p className="font-semibold text-slate-900">{point.party}</p>
-                  <p className="mt-2">Votes: {formatCompactNumber(point.votes)}</p>
-                  <p className="mt-1">Seats won: {point.seatsWon}</p>
+                  <p className="mt-2">Seats won: {formatNumber(point.seatsWon)}</p>
+                  <p className="mt-1">Votes shown: {formatCompactNumber(point.votes)}</p>
                 </div>
               );
             }}
           />
-          <Bar dataKey="votes" fill="#cf6a32" radius={[10, 10, 0, 0]} />
+          <Bar dataKey="seatsWon" fill="#cf6a32" radius={[10, 10, 0, 0]} />
         </BarChart>
       ) : (
         <div className="h-full w-full animate-pulse rounded-[1.5rem] bg-[#f8f5ee]" />
