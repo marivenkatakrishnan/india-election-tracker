@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { ElectionChart } from "@/components/dashboard/election-chart";
 import { ErrorState } from "@/components/ui/error-state";
 import { formatCompactNumber, formatNumber, formatPercent } from "@/lib/format";
@@ -13,6 +13,20 @@ function MetricCard({ label, value, hint }) {
       <p className="mt-2 text-sm text-slate-600">{hint}</p>
     </div>
   );
+}
+
+function buildPartyStandingHint(entry, fallbackText) {
+  if (!entry) {
+    return fallbackText;
+  }
+
+  const seatLabel = entry.seatsWon === 1 ? "seat" : "seats";
+
+  return `${entry.seatsWon} ${seatLabel} visible in this view.`;
+}
+
+function getConstituencyDetailUrl(rows = []) {
+  return rows.find((row) => row.detailUrl)?.detailUrl || "";
 }
 
 function exportRowsToCsv(rows) {
@@ -60,14 +74,82 @@ function exportRowsToCsv(rows) {
 }
 
 function DetailDrawer({ constituency, onClose }) {
+  const [detailRows, setDetailRows] = useState(constituency?.rows || []);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const primaryDetailUrl = getConstituencyDetailUrl(constituency?.rows);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!constituency) {
+      setDetailRows([]);
+      setDetailError("");
+      setIsLoadingDetails(false);
+
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setDetailRows(constituency.rows);
+    setDetailError("");
+    setIsLoadingDetails(false);
+
+    if (!primaryDetailUrl || constituency.rows.length > 1) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const fetchDetails = async () => {
+      setIsLoadingDetails(true);
+
+      try {
+        const response = await fetch(
+          `/api/elections/detail?region=${encodeURIComponent(constituency.regionId)}&url=${encodeURIComponent(primaryDetailUrl)}`,
+        );
+        const payload = await response.json();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!response.ok || !Array.isArray(payload.rows) || !payload.rows.length) {
+          setDetailError(payload.error || "Candidate-level results are not available yet.");
+          return;
+        }
+
+        setDetailRows(payload.rows);
+      } catch {
+        if (isMounted) {
+          setDetailError("Candidate-level results are not available yet.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingDetails(false);
+        }
+      }
+    };
+
+    fetchDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [constituency?.name, constituency?.regionId, constituency?.rows, primaryDetailUrl]);
+
   if (!constituency) {
     return null;
   }
 
-  const totalVotes = constituency.rows.reduce((sum, row) => sum + row.votes, 0);
-  const winner = constituency.rows.find((row) => row.rank === 1) || constituency.rows[0];
-  const runnerUp = constituency.rows.find((row) => row.rank === 2);
+  const resolvedRows = detailRows.length ? detailRows : constituency.rows;
+  const totalVotes = resolvedRows.reduce((sum, row) => sum + row.votes, 0);
+  const winner = resolvedRows.find((row) => row.rank === 1) || resolvedRows[0];
+  const runnerUp = resolvedRows.find((row) => row.rank === 2);
+  const thirdPlace = resolvedRows.find((row) => row.rank === 3);
   const margin = winner && runnerUp ? winner.votes - runnerUp.votes : winner?.votes || 0;
+  const pendingDetailText = detailError || "Detailed constituency ranking has not been published yet.";
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-sm">
@@ -88,8 +170,18 @@ function DetailDrawer({ constituency, onClose }) {
           </button>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Winner" value={winner?.party || "N/A"} hint={winner?.candidate || "Unavailable"} />
+          <MetricCard
+            label="Second place"
+            value={runnerUp?.party || "Pending"}
+            hint={runnerUp?.candidate || pendingDetailText}
+          />
+          <MetricCard
+            label="Third place"
+            value={thirdPlace?.party || "Pending"}
+            hint={thirdPlace?.candidate || pendingDetailText}
+          />
           <MetricCard label="Winning gap" value={formatNumber(margin)} hint="Difference between first and second place." />
           <MetricCard label="Total votes" value={formatCompactNumber(totalVotes)} hint="Combined votes in this area." />
         </div>
@@ -100,11 +192,14 @@ function DetailDrawer({ constituency, onClose }) {
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#0f3d3e]">Candidate stack</p>
               <h4 className="mt-2 font-serif text-2xl text-slate-900">Race breakdown</h4>
             </div>
-            <p className="text-sm text-slate-600">{constituency.rows.length} candidates</p>
+            <div className="text-right text-sm text-slate-600">
+              <p>{resolvedRows.length} candidates</p>
+              {isLoadingDetails ? <p className="mt-1 text-xs text-slate-500">Loading candidate detail...</p> : null}
+            </div>
           </div>
 
           <div className="mt-6 space-y-4">
-            {constituency.rows.map((row) => (
+            {resolvedRows.map((row) => (
               <div key={row.id} className="rounded-[1.5rem] border border-black/10 bg-[#f8f5ee] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -132,7 +227,7 @@ function DetailDrawer({ constituency, onClose }) {
   );
 }
 
-export function ElectionDashboard({ summary, rows, error }) {
+export function ElectionDashboard({ regionId, summary, rows, error }) {
   const [search, setSearch] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
@@ -177,6 +272,7 @@ export function ElectionDashboard({ summary, rows, error }) {
       id: row.constituency,
       name: row.constituency,
       state: row.state,
+      regionId,
       rows: [],
     };
 
@@ -208,6 +304,18 @@ export function ElectionDashboard({ summary, rows, error }) {
       }
 
       return right.votes - left.votes;
+    });
+  const topParties = chartData.slice(0, 3);
+  const leadingParty = topParties[0] || null;
+  const secondParty = topParties[1] || null;
+  const thirdParty = topParties[2] || null;
+  const chartPreview = chartData
+    .sort((left, right) => {
+      if (right.seatsWon !== left.seatsWon) {
+        return right.seatsWon - left.seatsWon;
+      }
+
+      return right.votes - left.votes;
     })
     .slice(0, 8);
   const activeConstituency =
@@ -218,16 +326,11 @@ export function ElectionDashboard({ summary, rows, error }) {
 
   return (
     <div className="space-y-8">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="Areas"
           value={visibleConstituencies}
           hint="Search and filters update this count instantly."
-        />
-        <MetricCard
-          label="People listed"
-          value={filteredRows.length}
-          hint="Each row shows one person's result inside an area."
         />
         <MetricCard
           label="Votes shown"
@@ -236,8 +339,21 @@ export function ElectionDashboard({ summary, rows, error }) {
         />
         <MetricCard
           label="Currently ahead"
-          value={summary.leadingParty}
-          hint={`${summary.leadingSeats} seats currently shown as ahead in the full view.`}
+          value={leadingParty?.party || summary.leadingParty}
+          hint={buildPartyStandingHint(
+            leadingParty,
+            `${summary.leadingSeats} seats currently shown as ahead in the full view.`,
+          )}
+        />
+        <MetricCard
+          label="Second place"
+          value={secondParty?.party || "Unavailable"}
+          hint={buildPartyStandingHint(secondParty, "Second-place party will appear as more live results come in.")}
+        />
+        <MetricCard
+          label="Third place"
+          value={thirdParty?.party || "Unavailable"}
+          hint={buildPartyStandingHint(thirdParty, "Third-place party will appear as more live results come in.")}
         />
       </section>
 
@@ -357,7 +473,7 @@ export function ElectionDashboard({ summary, rows, error }) {
             <p className="text-sm text-slate-600">Top eight parties in the filtered results.</p>
           </div>
           <div className="mt-6">
-            <ElectionChart data={chartData} />
+            <ElectionChart data={chartPreview} />
           </div>
         </div>
       </section>
@@ -447,7 +563,7 @@ export function ElectionDashboard({ summary, rows, error }) {
         />
         <MetricCard
           label="Parties shown"
-          value={chartData.length}
+          value={chartPreview.length}
           hint="The chart highlights the strongest parties in the current view."
         />
         <MetricCard

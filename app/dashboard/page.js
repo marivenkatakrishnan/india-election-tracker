@@ -47,7 +47,7 @@ export default async function DashboardPage({ searchParams }) {
         </div>
       </section>
 
-      <ElectionDashboard summary={data.summary} rows={data.rows} error={data.error} />
+      <ElectionDashboard regionId={region.id} summary={data.summary} rows={data.rows} error={data.error} />
     </div>
   );
 }
