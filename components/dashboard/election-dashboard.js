@@ -248,26 +248,28 @@ export function ElectionDashboard({ summary, rows, error }) {
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#0f3d3e]">
                 Search and filters
               </p>
-              <h2 className="mt-2 font-serif text-3xl text-slate-900">Find an area or party</h2>
+              <h2 className="mt-2 font-serif text-3xl text-slate-900">Find a constituency or candidate</h2>
             </div>
             <p className="max-w-sm text-sm text-slate-600">
-              Search by area, person, or party, then narrow the view by state and party.
+              Search by constituency, candidate, or party, then narrow the view with the filters below.
             </p>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-slate-700">Search</span>
+            <label className="flex flex-col gap-2">
+              <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">
+                Constituency or candidate
+              </span>
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Try Narela, BJP, or a candidate name"
+                placeholder="Try Chennai South or a candidate name"
                 className="w-full rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm outline-none ring-0 transition focus:border-[#0f3d3e]"
               />
             </label>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-slate-700">State</span>
+            <label className="flex flex-col gap-2">
+              <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">State</span>
               {hasSingleState ? (
                 <div className="flex h-[50px] items-center rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm font-medium text-slate-700">
                   {availableStates[0]}
@@ -287,8 +289,8 @@ export function ElectionDashboard({ summary, rows, error }) {
               )}
             </label>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-slate-700">Party</span>
+            <label className="flex flex-col gap-2">
+              <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">Party</span>
               <select
                 value={partyFilter}
                 onChange={(event) => setPartyFilter(event.target.value)}
@@ -328,12 +330,16 @@ export function ElectionDashboard({ summary, rows, error }) {
                   Full feed loaded
                 </span>
               )}
+              <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Auto-refreshes every 60s
+              </span>
             </div>
 
             <button
               type="button"
               onClick={() => exportRowsToCsv(filteredRows)}
-              className="rounded-full border border-black/10 bg-[#0f3d3e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#124f50]"
+              disabled={!filteredRows.length}
+              className="rounded-full border border-black/10 bg-[#0f3d3e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#124f50] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#0f3d3e]"
             >
               Export filtered CSV
             </button>
@@ -373,7 +379,7 @@ export function ElectionDashboard({ summary, rows, error }) {
           <table className="min-w-full divide-y divide-black/10 text-left text-sm">
             <thead className="sticky top-0 z-10 bg-[#f8f5ee] text-slate-700 shadow-[0_1px_0_rgba(15,61,62,0.08)]">
               <tr>
-                <th className="px-6 py-4 font-semibold">Area</th>
+                <th className="px-6 py-4 font-semibold">Constituency</th>
                 <th className="px-6 py-4 font-semibold">Candidate</th>
                 <th className="px-6 py-4 font-semibold">Party</th>
                 <th className="px-6 py-4 font-semibold">Votes</th>
@@ -446,7 +452,7 @@ export function ElectionDashboard({ summary, rows, error }) {
         />
         <MetricCard
           label="Region"
-          value={summary.stateCode}
+          value={summary.stateName}
           hint={summary.electionLabel}
         />
       </section>
