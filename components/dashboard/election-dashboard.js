@@ -2,8 +2,9 @@
 
 import { useDeferredValue, useEffect, useState } from "react";
 import { ElectionChart } from "@/components/dashboard/election-chart";
+import { PartySeatDonut } from "@/components/dashboard/party-seat-donut";
 import { ErrorState } from "@/components/ui/error-state";
-import { formatCompactNumber, formatNumber, formatPercent } from "@/lib/format";
+import { formatCompactNumber, formatNumber, formatPercent, formatRelativeTime } from "@/lib/format";
 
 function Badge({ children, tone = "default" }) {
   const toneClasses = {
@@ -86,6 +87,14 @@ function getCloseContests(rows, limit = 5) {
       return right.votes - left.votes;
     })
     .slice(0, limit);
+}
+
+function getMajorityMark(totalSeats) {
+  if (!Number.isFinite(totalSeats) || totalSeats <= 0) {
+    return 0;
+  }
+
+  return Math.floor(totalSeats / 2) + 1;
 }
 
 function exportRowsToCsv(rows) {
@@ -302,7 +311,6 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
   const [search, setSearch] = useState("");
   const [partyFilter, setPartyFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("closest-margin");
   const [selectedConstituency, setSelectedConstituency] = useState(null);
   const deferredSearch = useDeferredValue(search);
 
@@ -385,31 +393,14 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
   const secondParty = topParties[1] || null;
   const thirdParty = topParties[2] || null;
   const chartPreview = consolidatedParties.slice(0, 8);
+  const totalSeatsInTally = consolidatedParties.reduce((sum, entry) => sum + entry.seatsWon, 0);
+  const majorityMark = getMajorityMark(totalSeatsInTally);
+  const seatsToMajority = leadingParty ? Math.max(majorityMark - leadingParty.seatsWon, 0) : 0;
   const activeConstituency =
     selectedConstituency && constituencyMap.has(selectedConstituency)
       ? constituencyMap.get(selectedConstituency)
       : null;
   const hasActiveFilters = Boolean(search) || partyFilter !== "all" || stateFilter !== "all";
-  const sortedRows = [...filteredRows].sort((left, right) => {
-    if (sortBy === "closest-margin") {
-      const leftMargin = Number.isFinite(left.margin) ? left.margin : Number.MAX_SAFE_INTEGER;
-      const rightMargin = Number.isFinite(right.margin) ? right.margin : Number.MAX_SAFE_INTEGER;
-
-      if (leftMargin !== rightMargin) {
-        return leftMargin - rightMargin;
-      }
-    }
-
-    if (sortBy === "votes-desc") {
-      return right.votes - left.votes;
-    }
-
-    if (sortBy === "party") {
-      return left.party.localeCompare(right.party) || left.constituency.localeCompare(right.constituency);
-    }
-
-    return left.constituency.localeCompare(right.constituency);
-  });
   const closeContests = getCloseContests(filteredRows);
 
   return (
@@ -453,8 +444,36 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
               <h2 className="mt-2 font-serif text-3xl text-slate-900">Consolidated seats won</h2>
             </div>
             <p className="max-w-xl text-sm text-slate-600">
-              Quick party-wise seat totals from the current live results in this region.
+              Quick party-wise seat totals from the current live results in this region. Updated {formatRelativeTime(summary.fetchedAt)}.
             </p>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-[1.5rem] border border-black/10 bg-[#f8f5ee] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Majority mark</p>
+              <p className="mt-2 font-serif text-3xl text-slate-900">{formatNumber(majorityMark)}</p>
+              <p className="mt-2 text-sm text-slate-600">Seats needed to move past halfway in the current tally.</p>
+            </div>
+            <div className="rounded-[1.5rem] border border-black/10 bg-[#f8f5ee] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Seats in tally</p>
+              <p className="mt-2 font-serif text-3xl text-slate-900">{formatNumber(totalSeatsInTally)}</p>
+              <p className="mt-2 text-sm text-slate-600">Total seats currently reflected in the party-wise summary.</p>
+            </div>
+            <div className="rounded-[1.5rem] border border-black/10 bg-[#f8f5ee] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Top party gap</p>
+              <p className="mt-2 font-serif text-3xl text-slate-900">
+                {leadingParty ? formatNumber(seatsToMajority) : "0"}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {leadingParty
+                  ? `${leadingParty.party} needs ${formatNumber(seatsToMajority)} more seats to cross the majority mark.`
+                  : "Gap to majority will appear once the tally is live."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <PartySeatDonut items={partyBreakdown} totalSeats={totalSeatsInTally} />
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -539,7 +558,7 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
             </p>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-4">
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
             <label className="flex flex-col gap-2">
               <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">
                 Constituency or candidate
@@ -587,20 +606,6 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
                 ))}
               </select>
             </label>
-
-            <label className="flex flex-col gap-2">
-              <span className="flex min-h-10 items-end text-sm font-semibold text-slate-700">Sort by</span>
-              <select
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value)}
-                className="w-full rounded-2xl border border-black/10 bg-[#f8f5ee] px-4 py-3 text-sm outline-none transition focus:border-[#0f3d3e]"
-              >
-                <option value="closest-margin">Closest margins</option>
-                <option value="votes-desc">Highest votes</option>
-                <option value="constituency">Constituency</option>
-                <option value="party">Party</option>
-              </select>
-            </label>
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
@@ -635,7 +640,7 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
 
             <button
               type="button"
-              onClick={() => exportRowsToCsv(sortedRows)}
+              onClick={() => exportRowsToCsv(filteredRows)}
               disabled={!filteredRows.length}
               className="rounded-full border border-black/10 bg-[#0f3d3e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#124f50] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#0f3d3e]"
             >
@@ -688,7 +693,7 @@ export function ElectionDashboard({ regionId, summary, partyBreakdown = [], rows
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
-              {sortedRows.map((row) => {
+              {filteredRows.map((row) => {
                 const marginInsight = getMarginInsight(row.margin);
 
                 return (
